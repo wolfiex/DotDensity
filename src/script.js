@@ -1,255 +1,128 @@
-import './style.css';
-// import * as dat from 'lil-gui';
+import maplibregl from 'maplibre-gl';
+//https://webglfundamentals.org/
 
-import * as THREE from 'three';
-import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
-import {
-  GPUComputationRenderer,
-} from 'three/examples/jsm/misc/GPUComputationRenderer.js';
-import {
-  DepthOfFieldEffect,
-  EffectComposer,
-  EffectPass,
-  RenderPass,
-  VignetteEffect,
-  GlitchEffect,
-  NoiseEffect,
-  BlendFunction,
-  ChromaticAberrationEffect,
-  ScanlineEffect,
-} from 'postprocessing';
-import Stats from 'stats.js';
-var stats = new Stats ();
-stats.showPanel (0); // 0: fps, 1: ms, 2: mb, 3+: custom
-document.getElementById ('instruction').appendChild (stats.dom);
+var map = (window.map = new maplibregl.Map ({
+  container: 'map',
+  zoom: 3,
+  center: [7.5, 58],
+  style: 'https://api.maptiler.com/maps/streets/style.json?key=get_your_own_OpIi9ZULNHzrESv6T2vL',
+  antialias: true,
+}));
 
-class Sizes extends THREE.EventDispatcher {
-  constructor () {
-    super ();
-    this.update ();
-    window.addEventListener ('resize', () => {
-      this.update ();
+// create a custom style layer to implement the WebGL content
+var highlightLayer = {
+  id: 'highlight',
+  type: 'custom',
+
+  onAdd: function (map, gl) {
+    // create GLSL source for vertex shader
+    var vertexSource =
+      '' +
+      'uniform mat4 u_matrix;    ' +
+      'attribute vec2 a_pos;' +
+      'void main() {' +
+      '    gl_Position = u_matrix * vec4(a_pos, 0.0, 1.0);' +
+      '}';
+
+    // create GLSL source for fragment shader
+    // need to set precision!!
+    var fragmentSource = `
+    precision mediump float;
+  // uniform vec2 u_resolution;
+  uniform float u_density;
+  uniform float u_time;
+
+  float rand(vec2 co){
+    return fract(sin(dot(co.xy ,vec2(1.9898,1.2323))) * 43758.5453);
+}
+
+float show(vec2 co){
+  return float(int(u_density>rand(co)));
+}
+
+  void main() {
+    // vec2 st = gl_FragCoord.xy/u_resolution.xy;
+
+    gl_FragColor = vec4(1.0, 0.0,0.0,show(gl_FragCoord.xy));
+  }`;
+
+    console.error (gl);
+    // create a vertex shader
+    var vertexShader = gl.createShader (gl.VERTEX_SHADER);
+    gl.shaderSource (vertexShader, vertexSource);
+    gl.compileShader (vertexShader);
+
+    // create a fragment shader
+    var fragmentShader = gl.createShader (gl.FRAGMENT_SHADER);
+    gl.shaderSource (fragmentShader, fragmentSource);
+    gl.compileShader (fragmentShader);
+
+    // link the two shaders into a WebGL program
+    this.program = gl.createProgram ();
+    gl.attachShader (this.program, vertexShader);
+    gl.attachShader (this.program, fragmentShader);
+    gl.linkProgram (this.program);
+
+    // set the time uniform
+    this.timeLocation = gl.getUniformLocation(this.program, "u_time");
+    this.density = gl.getUniformLocation(this.program, "u_density");
+
+    this.aPos = gl.getAttribLocation (this.program, 'a_pos');
+
+    // define vertices of the triangle to be rendered in the custom style layer
+    var helsinki = maplibregl.MercatorCoordinate.fromLngLat ({
+      lng: 25.004,
+      lat: 60.239,
     });
-  }
+    var berlin = maplibregl.MercatorCoordinate.fromLngLat ({
+      lng: 13.403,
+      lat: 52.562,
+    });
+    var kyiv = maplibregl.MercatorCoordinate.fromLngLat ({
+      lng: 30.498,
+      lat: 50.541,
+    });
 
-  update () {
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
-    this.aspect = this.width / this.height;
-    this.pixelRatio = Math.min (window.devicePixelRatio, 2);
-    this.dispatchEvent ({type: 'resize', target: this});
-  }
-}
+    // create and initialize a WebGLBuffer to store vertex and color data
+    this.buffer = gl.createBuffer ();
+    gl.bindBuffer (gl.ARRAY_BUFFER, this.buffer);
+    gl.bufferData (
+      gl.ARRAY_BUFFER,
+      new Float32Array ([
+        helsinki.x,
+        helsinki.y,
+        berlin.x,
+        berlin.y,
+        kyiv.x,
+        kyiv.y,
+      ]),
+      gl.STATIC_DRAW
+    );
+  },
 
-// Canvas
-const canvas = document.querySelector ('canvas.webgl');
+  // method fired on each animation frame
+  // https://maplibre.org/maplibre-gl-js-docs/api/map/#map.event:render
+  render: function (gl, matrix) {
+    gl.useProgram (this.program);
 
-// Sizes
-const sizes = new Sizes ();
+    gl.uniform1f(this.timeLocation, 0.5);
+    gl.uniform1f(this.density, 0.3);
 
-// Scene
-const scene = new THREE.Scene ();
-
-// Camera
-const camera = new THREE.PerspectiveCamera (45, sizes.aspect, 10, 3000);
-camera.position.set (-300, 80, -300).normalize ().multiplyScalar (320);
-scene.add (camera);
-
-// Controls
-const controls = new OrbitControls (camera, canvas);
-
-controls.target.y = 60;
-const controlparams = {
-  maxDistance: 400,
-  minPolarAngle: 0.3,
-  maxPolarAngle: Math.PI / 2 - 0.1,
-  enablePan: false,
-  enableDamping: true,
-  autoRotate: true,
+    gl.uniformMatrix4fv (
+      gl.getUniformLocation (this.program, 'u_matrix'),
+      false,
+      matrix
+    );
+    gl.bindBuffer (gl.ARRAY_BUFFER, this.buffer);
+    gl.enableVertexAttribArray (this.aPos);
+    gl.vertexAttribPointer (this.aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.enable (gl.BLEND);
+    gl.blendFunc (gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays (gl.TRIANGLE_STRIP, 0, 3);
+  },
 };
 
-for (const [key, value] of Object.entries (controlparams)) {
-  controls[key] = value;
-}
-
-// Renderer
-const renderer = new THREE.WebGLRenderer ({
-  canvas: canvas,
-  powerPreference: 'high-performance',
-  antialias: false,
-  stencil: false,
-  depth: false,
+// add the custom style layer to the map
+map.on ('load', function () {
+  map.addLayer (highlightLayer, 'building');
 });
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.physicallyCorrectLights = true;
-renderer.outputEncoding = THREE.sRGBEncoding; // need for encoding
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.5;
-renderer.setSize (sizes.width, sizes.height);
-renderer.setPixelRatio (sizes.pixelRatio);
-
-// Composer
-const composer = new EffectComposer (renderer, {
-  multisampling: renderer.capabilities.isWebGL2 && sizes.pixelRatio === 1
-    ? 2
-    : undefined,
-});
-
-// const depthOfFieldEffect = new DepthOfFieldEffect(camera, {
-//   focusDistance: 0.0,
-//   focalLength: .6048,
-//   bokehScale: 0.60,
-//   height: 480,
-// })
-
-const renderPass = new RenderPass (scene, camera);
-composer.addPass (renderPass);
-
-// const chromaticAberrationEffect = new ChromaticAberrationEffect();
-
-// const glitchEffect = new GlitchEffect({
-//   chromaticAberrationOffset: chromaticAberrationEffect.offset
-// });
-// const noiseEffect = new NoiseEffect({
-//   blendFunction: BlendFunction.COLOR_DODGE
-// });
-
-// noiseEffect.blendMode.opacity.value = 0.1;
-// const scanlineEffect = new ScanlineEffect({
-//   blendFunction: BlendFunction.MULTIPLY,
-//   // opacity:.325,
-//   density:0.75//.0001,
-
-// // });
-
-// scanlineEffect.blendMode.opacity.value = 0.15;
-// noiseEffect.blendMode.opacity.value = 0.04;
-
-// console.log(scanlineEffect,noiseEffect)
-
-// const glitchPass = new EffectPass(camera, glitchEffect);//noiseEffect
-// const chromaticAberrationPass = new EffectPass(camera, chromaticAberrationEffect);
-// composer.addPass(glitchPass);
-// const depthOfFieldPass = new EffectPass(camera, depthOfFieldEffect)
-// composer.addPass(depthOfFieldPass);
-
-// composer.addPass (new EffectPass (camera, scanlineEffect,noiseEffect,depthOfFieldEffect));// composer.addPass(chromaticAberrationPass);
-
-// composer.addPass (new EffectPass (camera, new VignetteEffect ()));
-
-// Floor
-const plane = new THREE.Mesh (
-  new THREE.PlaneGeometry (3000, 3000),
-  new THREE.MeshStandardMaterial ({
-    roughness: 1,
-    metalness: 0.7,
-  })
-);
-plane.rotation.x = -Math.PI / 2;
-plane.position.y = -40;
-plane.receiveShadow = true;
-scene.add (plane);
-
-// Lights
-const directionalLight = new THREE.DirectionalLight ('#ffffff', 4);
-directionalLight.castShadow = true;
-directionalLight.shadow.mapSize.set (2048, 2048);
-var lights = {
-  near: 1,
-  far: 800,
-  left: -250,
-  right: 250,
-  top: 250,
-  bottom: -250,
-};
-
-for (const [key, value] of Object.entries (lights)) {
-  directionalLight.shadow.camera[key] = value;
-}
-
-directionalLight.position.set (-3, 2, -0.35).normalize ().multiplyScalar (200);
-scene.add (directionalLight);
-
-const directionalLight2 = new THREE.DirectionalLight ('#ffffff', 4);
-directionalLight2.castShadow = true;
-directionalLight2.shadow.mapSize.set (2048, 2048);
-
-for (const [key, value] of Object.entries (lights)) {
-  directionalLight2.shadow.camera[key] = value;
-}
-
-directionalLight2.position.set (3, 2, 0.35).normalize ().multiplyScalar (200);
-scene.add (directionalLight2);
-
-// scene.add(new THREE.CameraHelper(directionalLight.shadow.camera))
-const ambientLight = new THREE.AmbientLight ('#ffffff', 0.915);
-scene.add (ambientLight);
-
-// Background colors
-const bgColorLinear = new THREE.Color ('#111').convertSRGBToLinear ();
-plane.material.color = bgColorLinear;
-renderer.setClearColor (bgColorLinear);
-scene.fog = new THREE.Fog (bgColorLinear, 500, 800);
-
-//////////////
-
-const fluro = ['ffbe0b', 'fb5607', 'ff006e', '8338ec', '3a86ff'].map (
-  d => '#' + d
-);
-
-const flashycool = ['002626', '0e4749', '95c623', 'e55812', 'efe7da'].map (
-  d => '#' + d
-);
-
-/////////////
-
-// Resizing
-sizes.addEventListener ('resize', () => {
-  camera.aspect = sizes.aspect;
-  camera.updateProjectionMatrix ();
-
-  renderer.setSize (sizes.width, sizes.height);
-  renderer.setPixelRatio (sizes.pixelRatio);
-
-  composer.setSize (sizes.width, sizes.height);
-});
-
-// Toggle animation
-let isAnimationActive = true;
-window.addEventListener ('keyup', event => {
-  if (event.key === ' ') {
-    isAnimationActive = !isAnimationActive;
-  }
-});
-
-// Animate
-let elapsed = 0;
-const clock = new THREE.Clock ();
-window.t = clock;
-
-const tick = () => {
-  stats.begin ();
-  // time since last call to getDelta
-  const deltaTime = clock.getDelta ();
-
-  // // GPU Compute
-  // if (isAnimationActive) {
-  //   particleset.forEach (p => p.update (deltaTime));
-  // }
-
-  // Add a bit of a vertical wave
-  const elapsed = clock.elapsedTime / 4;
-
-  // Update controls
-  controls.update ();
-  // Render
-  composer.render ();
-  stats.end ();
-
-  window.requestAnimationFrame (tick);
-};
-
-window.c = camera;
-
-tick ();
