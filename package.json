@@ -19,6 +19,7 @@
     "lil-gui": "^0.16.1",
     "maplibre-gl": "^2.4.0",
     "mini-css-extract-plugin": "^2.6.0",
+    "nouislider": "^15.6.1",
     "portfinder-sync": "0.0.2",
     "postprocessing": "^6.28.1",
     "raw-loader": "^4.0.2",
