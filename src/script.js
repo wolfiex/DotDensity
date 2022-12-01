@@ -143,10 +143,10 @@ function render (gl, matrix) {
   // console.log(splits,densityslider.value)
 
   var breaks = [
-    [1, 0.0, 0.0, splits[1] / 100],
-    [0.0, 0.0, 1, splits[0] / 100],
-    [0.0, 1, 0.0, 0.0],
-    [0.5, 0.5, 0.5, 0.0],
+    [1.1, 0.0, 0.0, splits[1] / 100],
+    [0.0, 0.0, 1.1, splits[0] / 100],
+    [0.0, 1.1, 0.0, 0.0],
+    [0.5, 0.5, 0.5, -1.0],
   ]
     .flat ()
     .map (parseFloat);
