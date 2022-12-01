@@ -8,6 +8,7 @@ import 'nouislider/dist/nouislider.css';
 
 var slider = document.getElementById ('slider');
 var densityslider = document.getElementById ('densityslider');
+var pixdiv = document.getElementById ('pixdiv');
 
 noUiSlider.create (slider, {
   start: [10, 70],
@@ -20,6 +21,7 @@ noUiSlider.create (slider, {
 
 slider.addEventListener ('click', redraw);
 densityslider.addEventListener ('change', redraw);
+pixdiv.addEventListener ('change', redraw);
 
 function redraw () {
   console.log (map);
@@ -86,6 +88,7 @@ var highlightLayer = {
     // set the time uniform
     this.timeLocation = gl.getUniformLocation (this.program, 'u_time');
     this.density = gl.getUniformLocation (this.program, 'u_density');
+    this.pixdiv = gl.getUniformLocation (this.program, 'u_pixdiv');
     this.thresholds = gl.getUniformLocation (this.program, 'u_thresholds');
 
     window.g = gl;
@@ -134,6 +137,7 @@ function render (gl, matrix) {
   gl.useProgram (this.program);
   gl.uniform1f (this.timeLocation, 0.5);
   gl.uniform1f (this.density, parseFloat (densityslider.value) / 100.);
+  gl.uniform1f (this.pixdiv, parseFloat (pixdiv.value) );
   gl.uniform1f (this.counter, 0);
   // big to small. //[r,g,b,.gt.]
   // rgb as a ratio 0-1 i.e. n/255

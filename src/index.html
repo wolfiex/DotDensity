@@ -34,12 +34,27 @@
         id="densityslider"
         style="width: 100%"
       />
+      <span style="font-size: 10em !important">Simplex size</span>
+      <input
+        type="range"
+        min="5"
+        max="40"
+        value="11"
+        class="slider"
+        id="pixdiv"
+        style="width: 100%"
+      />
+      <br />
+      <br />
+      <br />
+      <span style="font-size: 10em !important; height: 10px"
+        >Colour Thresholds</span
+      >
+      <br /><br />
+      <div id="slider"></div>
 
       <br />
-      <br /><br />
-      <span style="font-size: 10em !important">Colour Thresholds</span>
-      <div id="slider"></div>
-      <br />
+
       DanielEllisResearch
     </div>
   </body>
@@ -82,6 +97,7 @@
 
     // uniform vec2 u_resolution;
     uniform float u_density;
+    uniform float u_pixdiv;
     uniform float u_time;
     uniform mat4 u_thresholds;
 
@@ -132,7 +148,7 @@
 
     // 5 categories
 
-    vec2 co = gl_FragCoord.xy/11.;
+    vec2 co = gl_FragCoord.xy/u_pixdiv;
     // divide by 100 for funky simplex noise
     float showval = show(co);
 
