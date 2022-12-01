@@ -2,6 +2,7 @@ import maplibregl from 'maplibre-gl';
 import noUiSlider from 'nouislider';
 import 'nouislider/dist/nouislider.css';
 //npm i https://github.com/wolfiex/maplibre-gl-js-webgl2
+//https://gist.github.com/patriciogonzalezvivo/670c22f3966e662d2f83
 
 //https://webglfundamentals.org/
 
